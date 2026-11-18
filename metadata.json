@@ -1,0 +1,6 @@
+{
+  "name": "Muavexa",
+  "description": "Live-synced editorial reader for the Muavexa blog.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
