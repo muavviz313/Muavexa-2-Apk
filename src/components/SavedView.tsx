@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Bookmark, Trash2 } from 'lucide-react';
+import { isRtlLanguage } from '../data/languages';
+import { useTranslatedPosts } from '../hooks/useTranslatedPosts';
 import { fetchLivePosts, fetchSingleLivePostById } from '../services/bloggerApi';
 import { BlogPost, BookmarkRef } from '../types/blog';
 import { ErrorState } from './ErrorState';
@@ -15,6 +17,7 @@ interface SavedViewProps {
   onToggleBookmark: (post: BlogPost) => void;
   refreshSignal: number;
   onSynced?: (date: Date) => void;
+  targetLang: string | null;
 }
 
 export function SavedView({
@@ -23,14 +26,23 @@ export function SavedView({
   onClearBookmarks,
   onOpenPost,
   isBookmarked,
-  onToggleBookmark,
+  onToggleBookmark: _onToggleBookmark,
   refreshSignal,
   onSynced,
+  targetLang,
 }: SavedViewProps) {
   const [savedPosts, setSavedPosts] = useState<BlogPost[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmClear, setConfirmClear] = useState(false);
+
+  const { displayPosts } = useTranslatedPosts(savedPosts, targetLang);
+  const dir = isRtlLanguage(targetLang) ? 'rtl' : 'ltr';
+
+  const openOriginalPost = (clicked: BlogPost) => {
+    const original = savedPosts.find((p) => p.id === clicked.id) || clicked;
+    onOpenPost(original);
+  };
 
   const hydrateBookmarksLive = async () => {
     if (bookmarks.length === 0) {
@@ -155,13 +167,14 @@ export function SavedView({
         <ErrorState message={error} onRetry={() => void hydrateBookmarksLive()} />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {savedPosts.map((post) => (
+          {displayPosts.map((post) => (
             <div key={post.id} className="flex flex-col">
               <PostCard
                 post={post}
-                onOpenPost={onOpenPost}
+                onOpenPost={openOriginalPost}
                 isBookmarked={isBookmarked(post.id, post.url)}
                 onToggleBookmark={() => onRemoveBookmark(post.id, post.url)}
+                dir={dir}
               />
             </div>
           ))}

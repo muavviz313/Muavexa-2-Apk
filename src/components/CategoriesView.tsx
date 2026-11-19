@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { ArrowLeft, ChevronRight, FolderOpen, Loader2 } from 'lucide-react';
+import { isRtlLanguage } from '../data/languages';
+import { useTranslatedPosts } from '../hooks/useTranslatedPosts';
 import { fetchLivePosts } from '../services/bloggerApi';
 import { BlogPost, CategoryInfo } from '../types/blog';
 import { ErrorState } from './ErrorState';
@@ -15,6 +17,7 @@ interface CategoriesViewProps {
   isBookmarked: (id: string, url?: string) => boolean;
   onToggleBookmark: (post: BlogPost) => void;
   refreshSignal: number;
+  targetLang: string | null;
 }
 
 export function CategoriesView({
@@ -26,6 +29,7 @@ export function CategoriesView({
   isBookmarked,
   onToggleBookmark,
   refreshSignal,
+  targetLang,
 }: CategoriesViewProps) {
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const [catPosts, setCatPosts] = useState<BlogPost[]>([]);
@@ -33,6 +37,19 @@ export function CategoriesView({
   const [isLoadingPosts, setIsLoadingPosts] = useState(false);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [postsError, setPostsError] = useState<string | null>(null);
+
+  const { displayPosts } = useTranslatedPosts(catPosts, targetLang);
+  const dir = isRtlLanguage(targetLang) ? 'rtl' : 'ltr';
+
+  const openOriginalPost = (clicked: BlogPost) => {
+    const original = catPosts.find((p) => p.id === clicked.id) || clicked;
+    onOpenPost(original);
+  };
+
+  const toggleOriginalBookmark = (clicked: BlogPost) => {
+    const original = catPosts.find((p) => p.id === clicked.id) || clicked;
+    onToggleBookmark(original);
+  };
 
   const loadCategoryPosts = async (categoryName: string, append = false, startIndex = 1) => {
     if (append) {
@@ -114,14 +131,15 @@ export function CategoriesView({
         ) : (
           <>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {catPosts.map((post) => (
+              {displayPosts.map((post) => (
                 <PostCard
                   key={post.id}
                   post={post}
-                  onOpenPost={onOpenPost}
+                  onOpenPost={openOriginalPost}
                   isBookmarked={isBookmarked(post.id, post.url)}
-                  onToggleBookmark={onToggleBookmark}
+                  onToggleBookmark={toggleOriginalBookmark}
                   onCategoryClick={(cat) => setActiveCategory(cat)}
+                  dir={dir}
                 />
               ))}
             </div>

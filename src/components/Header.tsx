@@ -1,5 +1,5 @@
 import React from 'react';
-import { Moon, RefreshCw, Sun } from 'lucide-react';
+import { Languages, Moon, RefreshCw, Sun } from 'lucide-react';
 import { TabId } from '../types/blog';
 import { BrandMark } from './BrandMark';
 
@@ -12,6 +12,8 @@ interface HeaderProps {
   isRefreshing: boolean;
   updatedLabel: string;
   onLogoClick: () => void;
+  targetLang: string | null;
+  onOpenTranslate: () => void;
 }
 
 const NAV_ITEMS: { id: TabId; label: string }[] = [
@@ -30,10 +32,12 @@ export function Header({
   isRefreshing,
   updatedLabel,
   onLogoClick,
+  targetLang,
+  onOpenTranslate,
 }: HeaderProps) {
   return (
     <header className="sticky top-0 z-30 h-14 bg-[#F6F8F8]/90 dark:bg-[#0B1214]/90 backdrop-blur-md border-b border-[#DCE6E5] dark:border-[#1E2E31]">
-      <div className="max-w-6xl mx-auto h-full px-4 sm:px-6 flex items-center justify-between gap-4 sm:gap-8">
+      <div className="max-w-6xl mx-auto h-full px-4 sm:px-6 flex items-center justify-between gap-3 sm:gap-8">
         {/* Brand Zone */}
         <button
           type="button"
@@ -77,16 +81,31 @@ export function Header({
           })}
         </nav>
 
-        {/* Right Controls: Sync status + Manual Refresh + Theme Toggle */}
-        <div className="flex items-center gap-1 sm:gap-2 shrink-0">
+        {/* Right Controls: Sync status + Translate + Manual Refresh + Theme Toggle */}
+        <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
           {updatedLabel && (
             <span
-              className="text-xs font-medium text-[#5B7C8A] dark:text-[#9BB3BD] tabular-nums whitespace-nowrap mr-1"
+              className="hidden sm:inline text-xs font-medium text-[#5B7C8A] dark:text-[#9BB3BD] tabular-nums whitespace-nowrap mr-1"
               aria-live="polite"
             >
               {updatedLabel}
             </span>
           )}
+
+          <button
+            type="button"
+            onClick={onOpenTranslate}
+            title="Translate language"
+            aria-label="Translate language"
+            className={`min-h-[44px] px-2.5 sm:px-3 flex items-center justify-center gap-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-colors cursor-pointer ${
+              targetLang
+                ? 'bg-[#0F3D3E] text-white dark:bg-[#BFE3D6] dark:text-[#0F3D3E]'
+                : 'text-[#0F3D3E] dark:text-[#ECF2F2] hover:bg-[#E5ECEB] dark:hover:bg-[#162326]'
+            }`}
+          >
+            <Languages className="w-[18px] h-[18px] shrink-0" />
+            <span className="uppercase">{targetLang ? targetLang : 'Translate'}</span>
+          </button>
 
           <button
             type="button"

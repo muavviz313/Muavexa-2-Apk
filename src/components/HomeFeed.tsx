@@ -1,5 +1,7 @@
 import React, { useRef, useState } from 'react';
-import { ArrowDown, Loader2, RefreshCw } from 'lucide-react';
+import { ArrowDown, Languages, Loader2, RefreshCw } from 'lucide-react';
+import { ALL_LANGUAGES, isRtlLanguage } from '../data/languages';
+import { useTranslatedPosts } from '../hooks/useTranslatedPosts';
 import { BlogPost } from '../types/blog';
 import { ErrorState } from './ErrorState';
 import { FeaturedHeroPost, PostCard } from './PostCard';
@@ -20,6 +22,7 @@ interface HomeFeedProps {
   onOpenPost: (post: BlogPost) => void;
   isBookmarked: (id: string, url?: string) => boolean;
   onToggleBookmark: (post: BlogPost) => void;
+  targetLang: string | null;
 }
 
 const PULL_THRESHOLD = 68;
@@ -39,10 +42,30 @@ export function HomeFeed({
   onOpenPost,
   isBookmarked,
   onToggleBookmark,
+  targetLang,
 }: HomeFeedProps) {
   const [pullDistance, setPullDistance] = useState(0);
   const startYRef = useRef<number | null>(null);
   const isPullingRef = useRef(false);
+
+  const { displayPosts, isTranslating, translateError } = useTranslatedPosts(
+    posts,
+    targetLang
+  );
+  const dir = isRtlLanguage(targetLang) ? 'rtl' : 'ltr';
+  const activeLangName = targetLang
+    ? ALL_LANGUAGES.find((l) => l.code === targetLang)?.name || targetLang
+    : null;
+
+  const openOriginalPost = (clicked: BlogPost) => {
+    const original = posts.find((p) => p.id === clicked.id) || clicked;
+    onOpenPost(original);
+  };
+
+  const toggleOriginalBookmark = (clicked: BlogPost) => {
+    const original = posts.find((p) => p.id === clicked.id) || clicked;
+    onToggleBookmark(original);
+  };
 
   const handleTouchStart = (e: React.TouchEvent) => {
     if (window.scrollY <= 2 && !isRefreshing && !isLoading) {
@@ -81,8 +104,8 @@ export function HomeFeed({
   };
 
   const hasMore = posts.length < totalResults;
-  const heroPost = posts.length > 0 ? posts[0] : null;
-  const remainingPosts = posts.length > 1 ? posts.slice(1) : [];
+  const heroPost = displayPosts.length > 0 ? displayPosts[0] : null;
+  const remainingPosts = displayPosts.length > 1 ? displayPosts.slice(1) : [];
 
   return (
     <div
@@ -163,6 +186,23 @@ export function HomeFeed({
         </div>
       )}
 
+      {/* Subtle Translation Status Bar */}
+      {(isTranslating || translateError) && (
+        <div className="rounded-xl bg-white dark:bg-[#131D20] border border-[#DCE6E5] dark:border-[#1E2E31] px-4 py-2.5 flex items-center gap-2 text-xs font-medium text-[#0F3D3E] dark:text-[#BFE3D6]">
+          {isTranslating ? (
+            <>
+              <Loader2 className="w-3.5 h-3.5 animate-spin text-[#177E70]" />
+              <span>Translating stories to {activeLangName}...</span>
+            </>
+          ) : (
+            <>
+              <Languages className="w-3.5 h-3.5 text-[#5B7C8A]" />
+              <span className="text-[#5B7C8A] dark:text-[#9BB3BD]">{translateError}</span>
+            </>
+          )}
+        </div>
+      )}
+
       {isLoading && posts.length === 0 ? (
         <HomeFeedSkeleton />
       ) : error && posts.length === 0 ? (
@@ -208,10 +248,11 @@ export function HomeFeed({
           {heroPost && (
             <FeaturedHeroPost
               post={heroPost}
-              onOpenPost={onOpenPost}
+              onOpenPost={openOriginalPost}
               isBookmarked={isBookmarked(heroPost.id, heroPost.url)}
-              onToggleBookmark={onToggleBookmark}
+              onToggleBookmark={toggleOriginalBookmark}
               onCategoryClick={(cat) => onSelectCategory(cat)}
+              dir={dir}
             />
           )}
 
@@ -221,10 +262,11 @@ export function HomeFeed({
                 <PostCard
                   key={post.id}
                   post={post}
-                  onOpenPost={onOpenPost}
+                  onOpenPost={openOriginalPost}
                   isBookmarked={isBookmarked(post.id, post.url)}
-                  onToggleBookmark={onToggleBookmark}
+                  onToggleBookmark={toggleOriginalBookmark}
                   onCategoryClick={(cat) => onSelectCategory(cat)}
+                  dir={dir}
                 />
               ))}
             </div>

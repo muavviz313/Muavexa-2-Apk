@@ -1,0 +1,8 @@
+{
+  "appId": "com.muavexa.app",
+  "appName": "Muavexa",
+  "webDir": "dist",
+  "server": {
+    "androidScheme": "https"
+  }
+}

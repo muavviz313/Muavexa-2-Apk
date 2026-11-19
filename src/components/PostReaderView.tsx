@@ -4,14 +4,24 @@ import {
   Bookmark,
   Check,
   ExternalLink,
+  Languages,
+  Loader2,
   Pause,
   Play,
+  RotateCcw,
   Share2,
   Square,
   Volume2,
 } from 'lucide-react';
+import { ALL_LANGUAGES, isRtlLanguage } from '../data/languages';
 import { useSpeechReader } from '../hooks/useSpeechReader';
+import { useTranslatedPosts } from '../hooks/useTranslatedPosts';
 import { fetchLivePosts } from '../services/bloggerApi';
+import {
+  translateManyTexts,
+  translateSanitizedHtml,
+  translateText,
+} from '../services/translateService';
 import { BlogPost, FontSizeOption } from '../types/blog';
 import { PostCard } from './PostCard';
 
@@ -26,6 +36,9 @@ interface PostReaderViewProps {
   fontSize: FontSizeOption;
   onChangeFontSize: (size: FontSizeOption) => void;
   refreshSignal: number;
+  targetLang: string | null;
+  onOpenTranslate: () => void;
+  onClearTranslate: () => void;
 }
 
 const FONT_SIZE_CLASSES: Record<FontSizeOption, string> = {
@@ -45,6 +58,9 @@ export function PostReaderView({
   fontSize,
   onChangeFontSize,
   refreshSignal,
+  targetLang,
+  onOpenTranslate,
+  onClearTranslate,
 }: PostReaderViewProps) {
   const articleContentRef = useRef<HTMLDivElement | null>(null);
   const [scrollProgress, setScrollProgress] = useState(0);
@@ -52,7 +68,78 @@ export function PostReaderView({
   const [relatedPosts, setRelatedPosts] = useState<BlogPost[]>([]);
   const [loadingRelated, setLoadingRelated] = useState(false);
 
-  const speech = useSpeechReader(post.title, post.plainText);
+  // Translation state for current article
+  const [translatedTitle, setTranslatedTitle] = useState<string>(post.title);
+  const [translatedCategories, setTranslatedCategories] = useState<string[]>(post.categories);
+  const [translatedHtml, setTranslatedHtml] = useState<string>(post.sanitizedHtml);
+  const [translatedPlainText, setTranslatedPlainText] = useState<string>(post.plainText);
+  const [isTranslating, setIsTranslating] = useState(false);
+  const [translateError, setTranslateError] = useState<string | null>(null);
+
+  const isRtl = isRtlLanguage(targetLang);
+  const dir = isRtl ? 'rtl' : 'ltr';
+  const activeLangLabel = targetLang
+    ? ALL_LANGUAGES.find((l) => l.code === targetLang)?.name || targetLang
+    : null;
+
+  useEffect(() => {
+    if (!targetLang || targetLang === 'en') {
+      setTranslatedTitle(post.title);
+      setTranslatedCategories(post.categories);
+      setTranslatedHtml(post.sanitizedHtml);
+      setTranslatedPlainText(post.plainText);
+      setIsTranslating(false);
+      setTranslateError(null);
+      return;
+    }
+
+    const controller = new AbortController();
+    let active = true;
+
+    const runTranslation = async () => {
+      setIsTranslating(true);
+      setTranslateError(null);
+      try {
+        const [newTitle, newCats, bodyResult] = await Promise.all([
+          translateText(post.title, targetLang, controller.signal),
+          post.categories.length > 0
+            ? translateManyTexts(post.categories, targetLang, controller.signal, 4)
+            : Promise.resolve([]),
+          translateSanitizedHtml(post.sanitizedHtml, targetLang, controller.signal),
+        ]);
+
+        if (!active) return;
+        setTranslatedTitle(newTitle || post.title);
+        setTranslatedCategories(newCats.length > 0 ? newCats : post.categories);
+        setTranslatedHtml(bodyResult.translatedHtml || post.sanitizedHtml);
+        setTranslatedPlainText(bodyResult.translatedPlainText || post.plainText);
+      } catch (err) {
+        if (!active) return;
+        if (err instanceof DOMException && err.name === 'AbortError') return;
+        setTranslatedTitle(post.title);
+        setTranslatedCategories(post.categories);
+        setTranslatedHtml(post.sanitizedHtml);
+        setTranslatedPlainText(post.plainText);
+        setTranslateError(
+          err instanceof Error ? err.message : 'Unable to translate this article right now.'
+        );
+      } finally {
+        if (active) {
+          setIsTranslating(false);
+        }
+      }
+    };
+
+    void runTranslation();
+
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [post.id, post.title, post.categories, post.sanitizedHtml, post.plainText, targetLang]);
+
+  const speech = useSpeechReader(translatedTitle, translatedPlainText, targetLang);
+  const { displayPosts: translatedRelated } = useTranslatedPosts(relatedPosts, targetLang);
 
   // Scroll to top when opening a new post
   useEffect(() => {
@@ -86,7 +173,7 @@ export function PostReaderView({
       window.removeEventListener('scroll', updateProgress);
       window.removeEventListener('resize', updateProgress);
     };
-  }, [post.id]);
+  }, [post.id, translatedHtml]);
 
   // Fetch up to 3 related posts sharing the same category/label
   useEffect(() => {
@@ -159,7 +246,6 @@ export function PostReaderView({
         if (err instanceof Error && err.name === 'AbortError') {
           return;
         }
-        // Fall back to clipboard copy below
       }
     }
 
@@ -168,7 +254,6 @@ export function PostReaderView({
       setShareFeedback('copied');
       window.setTimeout(() => setShareFeedback('idle'), 2200);
     } catch {
-      // Fallback textarea copy if clipboard API unavailable
       const ta = document.createElement('textarea');
       ta.value = post.url;
       ta.style.position = 'fixed';
@@ -180,6 +265,16 @@ export function PostReaderView({
       setShareFeedback('copied');
       window.setTimeout(() => setShareFeedback('idle'), 2200);
     }
+  };
+
+  const openOriginalRelated = (clicked: BlogPost) => {
+    const original = relatedPosts.find((p) => p.id === clicked.id) || clicked;
+    onOpenPost(original);
+  };
+
+  const toggleOriginalRelatedBookmark = (clicked: BlogPost) => {
+    const original = relatedPosts.find((p) => p.id === clicked.id) || clicked;
+    onToggleBookmark(original);
   };
 
   return (
@@ -249,20 +344,23 @@ export function PostReaderView({
         </div>
 
         {/* Article Header */}
-        <header className="space-y-4 pb-6 border-b border-[#DCE6E5] dark:border-[#1E2E31]">
+        <header
+          dir={dir}
+          className="space-y-4 pb-6 border-b border-[#DCE6E5] dark:border-[#1E2E31]"
+        >
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs sm:text-sm font-medium text-[#5B7C8A] dark:text-[#9BB3BD]">
-            {post.categories.length > 0 && (
+            {translatedCategories.length > 0 && (
               <>
-                {post.categories.map((cat, idx) => (
-                  <React.Fragment key={cat}>
+                {translatedCategories.map((cat, idx) => (
+                  <React.Fragment key={`${cat}-${idx}`}>
                     <button
                       type="button"
-                      onClick={() => onSelectCategory(cat)}
+                      onClick={() => onSelectCategory(post.categories[idx] || cat)}
                       className="text-[#177E70] dark:text-[#BFE3D6] font-semibold hover:underline underline-offset-4 cursor-pointer"
                     >
                       {cat}
                     </button>
-                    {idx < post.categories.length - 1 && <span aria-hidden="true">/</span>}
+                    {idx < translatedCategories.length - 1 && <span aria-hidden="true">/</span>}
                   </React.Fragment>
                 ))}
                 <span aria-hidden="true">·</span>
@@ -278,10 +376,13 @@ export function PostReaderView({
           </div>
 
           <h1 className="font-serif text-3xl sm:text-4xl lg:text-[42px] font-semibold leading-[1.16] tracking-tight text-[#0F3D3E] dark:text-[#ECF2F2]">
-            {post.title}
+            {translatedTitle}
           </h1>
 
-          <div className="flex items-center justify-between gap-4 pt-1 text-xs sm:text-sm text-[#5B7C8A] dark:text-[#9BB3BD]">
+          <div
+            dir="ltr"
+            className="flex items-center justify-between gap-4 pt-1 text-xs sm:text-sm text-[#5B7C8A] dark:text-[#9BB3BD]"
+          >
             <span>By {post.authorName}</span>
             <a
               href={post.url}
@@ -295,7 +396,7 @@ export function PostReaderView({
           </div>
         </header>
 
-        {/* Reader Controls Toolbar: Font Size + Listen (TTS) */}
+        {/* Reader Controls Toolbar: Font Size + Translate + Listen (TTS) */}
         <div className="my-6 p-3 rounded-2xl bg-white dark:bg-[#131D20] border border-[#DCE6E5] dark:border-[#1E2E31] flex flex-wrap items-center justify-between gap-3">
           {/* Font Size Controls */}
           <div className="flex items-center gap-1.5" role="group" aria-label="Text size">
@@ -323,56 +424,111 @@ export function PostReaderView({
             })}
           </div>
 
-          {/* Listen to Article (Web Speech API) */}
-          {speech.isSupported && (
-            <div className="flex items-center gap-1.5">
+          {/* Translate & Audio Controls */}
+          <div className="flex flex-wrap items-center gap-1.5">
+            <button
+              type="button"
+              onClick={onOpenTranslate}
+              className={`min-h-[40px] px-3.5 rounded-xl inline-flex items-center gap-2 text-xs font-semibold transition-colors cursor-pointer ${
+                targetLang
+                  ? 'bg-[#0F3D3E] text-white dark:bg-[#BFE3D6] dark:text-[#0F3D3E]'
+                  : 'bg-[#F0F5F4] dark:bg-[#182628] text-[#0F3D3E] dark:text-[#ECF2F2] hover:bg-[#E1ECEA] dark:hover:bg-[#213337]'
+              }`}
+            >
+              {isTranslating ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Languages className="w-4 h-4" />
+              )}
+              <span>
+                {isTranslating
+                  ? 'Translating...'
+                  : activeLangLabel
+                  ? activeLangLabel
+                  : 'Translate'}
+              </span>
+            </button>
+
+            {targetLang && (
               <button
                 type="button"
-                onClick={speech.togglePlayPause}
-                className={`min-h-[40px] px-4 rounded-xl inline-flex items-center gap-2 text-xs font-semibold transition-colors cursor-pointer ${
-                  speech.isSpeaking
-                    ? 'bg-[#177E70] text-white'
-                    : 'bg-[#0F3D3E]/10 dark:bg-[#BFE3D6]/15 text-[#0F3D3E] dark:text-[#BFE3D6] hover:bg-[#0F3D3E] hover:text-white dark:hover:bg-[#BFE3D6] dark:hover:text-[#0F3D3E]'
-                }`}
+                onClick={onClearTranslate}
+                title="Show original English"
+                aria-label="Restore original language"
+                className="min-h-[40px] px-2.5 rounded-xl bg-[#F0F5F4] dark:bg-[#182628] text-xs font-semibold text-[#5B7C8A] dark:text-[#9BB3BD] hover:text-[#0F3D3E] dark:hover:text-white inline-flex items-center gap-1 transition-colors cursor-pointer"
               >
-                {!speech.isSpeaking ? (
-                  <>
-                    <Volume2 className="w-4 h-4" />
-                    <span>Listen to Article</span>
-                  </>
-                ) : speech.isPaused ? (
-                  <>
-                    <Play className="w-4 h-4" />
-                    <span>Resume Audio</span>
-                  </>
-                ) : (
-                  <>
-                    <Pause className="w-4 h-4" />
-                    <span>Pause Audio</span>
-                  </>
-                )}
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span>Original</span>
               </button>
+            )}
 
-              {speech.isSpeaking && (
+            {speech.isSupported && (
+              <>
                 <button
                   type="button"
-                  onClick={speech.stop}
-                  aria-label="Stop listening"
-                  title="Stop listening"
-                  className="min-h-[40px] min-w-[40px] flex items-center justify-center rounded-xl bg-[#F0F5F4] dark:bg-[#182628] text-[#0F3D3E] dark:text-[#ECF2F2] hover:bg-[#DCE6E5] dark:hover:bg-[#233538] transition-colors cursor-pointer"
+                  onClick={speech.togglePlayPause}
+                  className={`min-h-[40px] px-4 rounded-xl inline-flex items-center gap-2 text-xs font-semibold transition-colors cursor-pointer ${
+                    speech.isSpeaking
+                      ? 'bg-[#177E70] text-white'
+                      : 'bg-[#0F3D3E]/10 dark:bg-[#BFE3D6]/15 text-[#0F3D3E] dark:text-[#BFE3D6] hover:bg-[#0F3D3E] hover:text-white dark:hover:bg-[#BFE3D6] dark:hover:text-[#0F3D3E]'
+                  }`}
                 >
-                  <Square className="w-3.5 h-3.5 fill-current" />
+                  {!speech.isSpeaking ? (
+                    <>
+                      <Volume2 className="w-4 h-4" />
+                      <span>Listen to Article</span>
+                    </>
+                  ) : speech.isPaused ? (
+                    <>
+                      <Play className="w-4 h-4" />
+                      <span>Resume Audio</span>
+                    </>
+                  ) : (
+                    <>
+                      <Pause className="w-4 h-4" />
+                      <span>Pause Audio</span>
+                    </>
+                  )}
                 </button>
-              )}
-            </div>
-          )}
+
+                {speech.isSpeaking && (
+                  <button
+                    type="button"
+                    onClick={speech.stop}
+                    aria-label="Stop listening"
+                    title="Stop listening"
+                    className="min-h-[40px] min-w-[40px] flex items-center justify-center rounded-xl bg-[#F0F5F4] dark:bg-[#182628] text-[#0F3D3E] dark:text-[#ECF2F2] hover:bg-[#DCE6E5] dark:hover:bg-[#233538] transition-colors cursor-pointer"
+                  >
+                    <Square className="w-3.5 h-3.5 fill-current" />
+                  </button>
+                )}
+              </>
+            )}
+          </div>
         </div>
+
+        {/* Translation feedback if error occurred */}
+        {translateError && (
+          <div className="mb-6 rounded-xl bg-[#0F3D3E]/5 dark:bg-[#BFE3D6]/10 border border-[#DCE6E5] dark:border-[#1E2E31] px-4 py-3 flex items-center justify-between gap-3 text-xs text-[#4A6570] dark:text-[#BFE3D6]">
+            <span>{translateError}</span>
+            <button
+              type="button"
+              onClick={onOpenTranslate}
+              className="font-semibold underline shrink-0 cursor-pointer"
+            >
+              Change language
+            </button>
+          </div>
+        )}
 
         {/* Sanitized Blogger HTML Content */}
         <div
           ref={articleContentRef}
-          className={`muavexa-prose ${FONT_SIZE_CLASSES[fontSize]} text-[#1E2B2D] dark:text-[#DCE6E6] pb-10`}
-          dangerouslySetInnerHTML={{ __html: post.sanitizedHtml }}
+          dir={dir}
+          className={`muavexa-prose ${FONT_SIZE_CLASSES[fontSize]} text-[#1E2B2D] dark:text-[#DCE6E6] pb-10 ${
+            isTranslating ? 'opacity-70 transition-opacity' : ''
+          }`}
+          dangerouslySetInnerHTML={{ __html: translatedHtml }}
         />
 
         {/* Bottom Share & Bookmark Bar */}
@@ -444,13 +600,14 @@ export function PostReaderView({
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              {relatedPosts.map((rel) => (
+              {translatedRelated.map((rel) => (
                 <PostCard
                   key={rel.id}
                   post={rel}
-                  onOpenPost={onOpenPost}
+                  onOpenPost={openOriginalRelated}
                   isBookmarked={isPostBookmarked(rel.id, rel.url)}
-                  onToggleBookmark={onToggleBookmark}
+                  onToggleBookmark={toggleOriginalRelatedBookmark}
+                  dir={dir}
                 />
               ))}
             </div>

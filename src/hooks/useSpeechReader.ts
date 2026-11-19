@@ -38,7 +38,7 @@ function splitIntoChunks(text: string, maxLen = 220): string[] {
   return chunks;
 }
 
-export function useSpeechReader(title: string, plainText: string) {
+export function useSpeechReader(title: string, plainText: string, lang?: string | null) {
   const isSupported =
     typeof window !== 'undefined' &&
     'speechSynthesis' in window &&
@@ -74,6 +74,9 @@ export function useSpeechReader(title: string, plainText: string) {
       const utterance = new SpeechSynthesisUtterance(chunks[idx]);
       utterance.rate = 1.0;
       utterance.pitch = 1.0;
+      if (lang) {
+        utterance.lang = lang;
+      }
 
       utterance.onend = () => {
         if (cancelledRef.current) return;

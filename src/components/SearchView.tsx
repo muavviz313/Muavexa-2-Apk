@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { Clock, Search, X } from 'lucide-react';
+import { isRtlLanguage } from '../data/languages';
 import { useRecentSearches } from '../hooks/useRecentSearches';
+import { useTranslatedPosts } from '../hooks/useTranslatedPosts';
 import { fetchLivePosts } from '../services/bloggerApi';
 import { BlogPost } from '../types/blog';
 import { ErrorState } from './ErrorState';
@@ -12,6 +14,7 @@ interface SearchViewProps {
   isBookmarked: (id: string, url?: string) => boolean;
   onToggleBookmark: (post: BlogPost) => void;
   refreshSignal: number;
+  targetLang: string | null;
 }
 
 export function SearchView({
@@ -19,6 +22,7 @@ export function SearchView({
   isBookmarked,
   onToggleBookmark,
   refreshSignal,
+  targetLang,
 }: SearchViewProps) {
   const [query, setQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
@@ -28,6 +32,18 @@ export function SearchView({
   const [error, setError] = useState<string | null>(null);
 
   const { recentSearches, addSearch, removeSearch, clearSearches } = useRecentSearches();
+  const { displayPosts } = useTranslatedPosts(results, targetLang);
+  const dir = isRtlLanguage(targetLang) ? 'rtl' : 'ltr';
+
+  const openOriginalPost = (clicked: BlogPost) => {
+    const original = results.find((p) => p.id === clicked.id) || clicked;
+    onOpenPost(original);
+  };
+
+  const toggleOriginalBookmark = (clicked: BlogPost) => {
+    const original = results.find((p) => p.id === clicked.id) || clicked;
+    onToggleBookmark(original);
+  };
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -199,13 +215,14 @@ export function SearchView({
                 {debouncedQuery}&rdquo;
               </p>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {results.map((post) => (
+                {displayPosts.map((post) => (
                   <PostCard
                     key={post.id}
                     post={post}
-                    onOpenPost={onOpenPost}
+                    onOpenPost={openOriginalPost}
                     isBookmarked={isBookmarked(post.id, post.url)}
-                    onToggleBookmark={onToggleBookmark}
+                    onToggleBookmark={toggleOriginalBookmark}
+                    dir={dir}
                   />
                 ))}
               </div>

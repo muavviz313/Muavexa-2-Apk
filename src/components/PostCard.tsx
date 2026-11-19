@@ -9,6 +9,7 @@ interface PostCardProps {
   isBookmarked: boolean;
   onToggleBookmark: (post: BlogPost) => void;
   onCategoryClick?: (category: string) => void;
+  dir?: 'ltr' | 'rtl';
 }
 
 export function FeaturedHeroPost({
@@ -17,11 +18,15 @@ export function FeaturedHeroPost({
   isBookmarked,
   onToggleBookmark,
   onCategoryClick,
+  dir = 'ltr',
 }: PostCardProps) {
   const primaryCategory = post.categories[0] || 'Latest';
 
   return (
-    <article className="group rounded-2xl overflow-hidden bg-white dark:bg-[#131D20] border border-[#DCE6E5] dark:border-[#1E2E31] transition-colors">
+    <article
+      dir={dir}
+      className="group rounded-2xl overflow-hidden bg-white dark:bg-[#131D20] border border-[#DCE6E5] dark:border-[#1E2E31] transition-colors"
+    >
       <div className="grid grid-cols-1 lg:grid-cols-12 items-stretch">
         <button
           type="button"
@@ -118,11 +123,15 @@ export function PostCard({
   isBookmarked,
   onToggleBookmark,
   onCategoryClick,
+  dir = 'ltr',
 }: PostCardProps) {
   const primaryCategory = post.categories[0] || 'Article';
 
   return (
-    <article className="group flex flex-col rounded-2xl overflow-hidden bg-white dark:bg-[#131D20] border border-[#DCE6E5] dark:border-[#1E2E31] transition-colors">
+    <article
+      dir={dir}
+      className="group flex flex-col rounded-2xl overflow-hidden bg-white dark:bg-[#131D20] border border-[#DCE6E5] dark:border-[#1E2E31] transition-colors"
+    >
       <button
         type="button"
         onClick={() => onOpenPost(post)}

@@ -7,6 +7,7 @@ import { HomeFeed } from './components/HomeFeed';
 import { PostReaderView } from './components/PostReaderView';
 import { SavedView } from './components/SavedView';
 import { SearchView } from './components/SearchView';
+import { TranslateModal } from './components/TranslateModal';
 import { useBookmarks } from './hooks/useBookmarks';
 import {
   fetchLiveCategoryDirectory,
@@ -18,6 +19,7 @@ import { BlogPost, CategoryInfo, FontSizeOption, TabId } from './types/blog';
 
 const THEME_STORAGE_KEY = 'muavexa_theme_v1';
 const FONT_SIZE_STORAGE_KEY = 'muavexa_font_size_v1';
+const LANG_STORAGE_KEY = 'muavexa_lang_v1';
 const PAGE_SIZE = 10;
 
 function getInitialTheme(): boolean {
@@ -46,9 +48,22 @@ function getInitialFontSize(): FontSizeOption {
   return 'medium';
 }
 
+function getInitialLang(): string | null {
+  try {
+    const saved = window.localStorage.getItem(LANG_STORAGE_KEY);
+    if (saved && saved !== 'en') return saved;
+  } catch {
+    // Ignore
+  }
+  return null;
+}
+
 export default function App() {
   const [isDark, setIsDark] = useState<boolean>(getInitialTheme);
   const [fontSize, setFontSize] = useState<FontSizeOption>(getInitialFontSize);
+  const [targetLang, setTargetLang] = useState<string | null>(getInitialLang);
+  const [isTranslateOpen, setIsTranslateOpen] = useState(false);
+
   const [activeTab, setActiveTab] = useState<TabId>('home');
   const [activePost, setActivePost] = useState<BlogPost | null>(null);
 
@@ -95,6 +110,19 @@ export default function App() {
       // Ignore
     }
   }, [fontSize]);
+
+  // Persist selected translation language
+  useEffect(() => {
+    try {
+      if (targetLang) {
+        window.localStorage.setItem(LANG_STORAGE_KEY, targetLang);
+      } else {
+        window.localStorage.removeItem(LANG_STORAGE_KEY);
+      }
+    } catch {
+      // Ignore
+    }
+  }, [targetLang]);
 
   const loadFeed = useCallback(
     async (options?: {
@@ -180,7 +208,6 @@ export default function App() {
       loadDirectory(),
     ];
 
-    // If an article is currently open, fetch its freshest content too
     const currentPost = activePostRef.current;
     if (currentPost?.numericId) {
       tasks.push(
@@ -275,6 +302,8 @@ export default function App() {
         isRefreshing={isRefreshing}
         updatedLabel={updatedLabel}
         onLogoClick={handleLogoClick}
+        targetLang={targetLang}
+        onOpenTranslate={() => setIsTranslateOpen(true)}
       />
 
       <main className="flex-1 w-full max-w-6xl mx-auto px-4 sm:px-6 pt-6 pb-24 md:pb-12">
@@ -298,6 +327,9 @@ export default function App() {
                 fontSize={fontSize}
                 onChangeFontSize={setFontSize}
                 refreshSignal={refreshSignal}
+                targetLang={targetLang}
+                onOpenTranslate={() => setIsTranslateOpen(true)}
+                onClearTranslate={() => setTargetLang(null)}
               />
             </motion.div>
           ) : (
@@ -330,6 +362,7 @@ export default function App() {
                   onOpenPost={handleOpenPost}
                   isBookmarked={isBookmarked}
                   onToggleBookmark={toggleBookmark}
+                  targetLang={targetLang}
                 />
               )}
 
@@ -343,6 +376,7 @@ export default function App() {
                   isBookmarked={isBookmarked}
                   onToggleBookmark={toggleBookmark}
                   refreshSignal={refreshSignal}
+                  targetLang={targetLang}
                 />
               )}
 
@@ -356,6 +390,7 @@ export default function App() {
                   onToggleBookmark={toggleBookmark}
                   refreshSignal={refreshSignal}
                   onSynced={(date) => setLastUpdated(date)}
+                  targetLang={targetLang}
                 />
               )}
 
@@ -365,6 +400,7 @@ export default function App() {
                   isBookmarked={isBookmarked}
                   onToggleBookmark={toggleBookmark}
                   refreshSignal={refreshSignal}
+                  targetLang={targetLang}
                 />
               )}
             </motion.div>
@@ -376,6 +412,13 @@ export default function App() {
         activeTab={activeTab}
         onSelectTab={handleSelectTab}
         savedCount={bookmarks.length}
+      />
+
+      <TranslateModal
+        isOpen={isTranslateOpen}
+        onClose={() => setIsTranslateOpen(false)}
+        selectedLang={targetLang}
+        onSelectLang={setTargetLang}
       />
     </div>
   );
