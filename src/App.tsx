@@ -207,20 +207,6 @@ export default function App() {
     void loadFeed({ category: selectedCategory });
   }, [loadFeed, selectedCategory]);
 
-  // Auto-refresh whenever browser tab regains focus (visibilitychange)
-  useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        void refreshAllLive();
-      }
-    };
-
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
-  }, [refreshAllLive]);
-
   // Sync browser back button when reading an article
   useEffect(() => {
     const handlePopState = () => {
