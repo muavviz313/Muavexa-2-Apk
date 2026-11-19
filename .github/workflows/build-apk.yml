@@ -18,7 +18,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
+      - name: Setup Node.js 22
         uses: actions/setup-node@v4
         with:
           node-version: '22'
@@ -29,11 +29,24 @@ jobs:
           distribution: 'temurin'
           java-version: '21'
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
+      - name: Accept Android SDK licenses
+        run: |
+          if [ -x "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" ]; then
+            yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null 2>&1 || true
+          fi
 
       - name: Install dependencies
-        run: npm install --legacy-peer-deps
+        run: |
+          npm install --legacy-peer-deps
+          if ! node -e "const p=require('./package.json'); process.exit((p.dependencies?.['@capacitor/android'] || p.devDependencies?.['@capacitor/android']) ? 0 : 1)"; then
+            npm install @capacitor/core @capacitor/cli @capacitor/android --legacy-peer-deps
+          fi
+
+      - name: Ensure Capacitor config
+        run: |
+          if [ ! -f "capacitor.config.json" ] && [ ! -f "capacitor.config.ts" ]; then
+            node -e 'require("fs").writeFileSync("capacitor.config.json", JSON.stringify({ appId: "com.muavexa.app", appName: "Muavexa", webDir: "dist", server: { androidScheme: "https" } }, null, 2))'
+          fi
 
       - name: Build web app
         run: npm run build
